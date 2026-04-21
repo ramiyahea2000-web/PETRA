@@ -7,7 +7,7 @@ from PIL import Image
 import io
 import pandas as pd
 
-# المسارات والبيانات الأساسية
+# 1. إعدادات المسارات
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "workshop.db")
 UPLOAD_DIR = os.path.join(APP_DIR, "uploads")
@@ -16,10 +16,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALARM_THRESHOLD = 3
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DATABASE
-# ─────────────────────────────────────────────────────────────────────────────
-
+# 2. وظائف قاعدة البيانات
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -41,20 +38,12 @@ def init_db():
     conn.commit()
     conn.close()
 
-def is_duplicate(petra_code, part_number, project_number):
+def save_entry(p_code, p_num, prj_num, notes, img_path):
     conn = get_connection()
-    pn = project_number.strip() if project_number else ""
-    query = "SELECT COUNT(*) FROM entries WHERE petra_code = ? AND project_number = ?"
-    dup = conn.execute(query, (petra_code, pn)).fetchone()[0]
-    conn.close()
-    return dup > 0
-
-def save_entry(petra_code, part_number, project_number, notes, image_path):
-    conn = get_connection()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
         "INSERT INTO entries (petra_code, part_number, project_number, notes, image_path, timestamp) VALUES (?,?,?,?,?,?)",
-        (petra_code, part_number, project_number, notes, image_path, timestamp)
+        (p_code, p_num, prj_num, notes, img_path, ts)
     )
     conn.commit()
     conn.close()
@@ -65,25 +54,15 @@ def get_all_entries():
     conn.close()
     return rows
 
-def get_counts(petra_code):
+def get_counts(p_code):
     conn = get_connection()
-    count = conn.execute("SELECT COUNT(*) FROM entries WHERE petra_code = ?", (petra_code,)).fetchone()[0]
+    c = conn.execute("SELECT COUNT(*) FROM entries WHERE petra_code = ?", (p_code,)).fetchone()[0]
     conn.close()
-    return count
+    return c
 
-def delete_entries(ids):
-    conn = get_connection()
-    placeholders = ",".join("?" * len(ids))
-    conn.execute(f"DELETE FROM entries WHERE id IN ({placeholders})", ids)
-    conn.commit()
-    conn.close()
-
-# ─────────────────────────────────────────────────────────────────────────────
-# APP INTERFACE
-# ─────────────────────────────────────────────────────────────────────────────
-
+# 3. واجهة التطبيق
 init_db()
-st.set_page_config(page_title="Petra Panel Workshop", layout="wide")
+st.set_page_config(page_title="Panel Workshop", layout="wide")
 
 # عرض اللوجو
 col_l, col_c, col_r = st.columns([1, 2, 1])
@@ -95,9 +74,10 @@ st.title("🏭 Panel Workshop - Fault Reporter")
 
 tab_submit, tab_dashboard, tab_admin = st.tabs(["Submit Entry", "Dashboard", "Admin / Delete"])
 
+# --- TAB 1: SUBMIT ---
 with tab_submit:
     st.header("Report a Faulty Part")
-    with st.form("entry_form", clear_on_submit=True):
+    with st.form("main_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
             p_code = st.text_input("Petra Code *")
@@ -106,57 +86,78 @@ with tab_submit:
             prj_num = st.text_input("Project Number")
             notes = st.text_area("Notes")
         
-        st.subheader("Capture Image")
-        method = st.radio("Method", ["Device Camera / Gallery", "In-App Camera"])
-        img_file = st.file_uploader("Upload") if "Device" in method else st.camera_input("Take Photo")
+        st.subheader("Capture Photo")
+        # حل مشكلة الكاميرا: خيارين واضحين
+        cam_method = st.radio("Photo Source", ["Camera Scan", "Upload from Gallery/File"])
+        img_file = st.camera_input("Scan Part") if cam_method == "Camera Scan" else st.file_uploader("Choose Image", type=['png', 'jpg', 'jpeg'])
         
         if st.form_submit_button("Submit Report", type="primary"):
             if not p_code.strip():
-                st.error("Petra Code is required!")
-            elif is_duplicate(p_code.strip(), p_num.strip(), prj_num.strip()):
-                st.warning("This entry already exists!")
+                st.error("Please enter Petra Code!")
             else:
                 img_path = None
                 if img_file:
-                    fname = uuid.uuid4().hex + ".png"
+                    fname = f"{uuid.uuid4().hex}.png"
                     img_path = os.path.join(UPLOAD_DIR, fname)
                     Image.open(img_file).save(img_path)
                 
                 save_entry(p_code.strip(), p_num.strip(), prj_num.strip(), notes.strip(), img_path)
-                st.success("Submitted successfully!")
                 
-                # فحص التكرار للإنذار
-                total = get_counts(p_code.strip())
-                if total >= ALARM_THRESHOLD:
-                    st.error(f"🚨 ALERT: Petra Code {p_code} has been reported {total} times!")
+                # تنبيه التكرار
+                count = get_counts(p_code.strip())
+                if count >= ALARM_THRESHOLD:
+                    st.error(f"🚨 CRITICAL: Code {p_code} reported {count} times! Check EPLAN.")
+                else:
+                    st.success("Entry Saved!")
                 st.rerun()
 
-    # عرض التسليمات "براني"
     st.markdown("---")
     st.header("Recent Submissions")
-    all_data = get_all_entries()
-    for row in all_data:
-        with st.expander(f"{row['timestamp']} | Petra: {row['petra_code']} | Project: {row['project_number']}"):
-            col_t, col_i = st.columns([2, 1])
-            with col_t:
-                st.write(f"**Part Number:** {row['part_number']}")
-                st.write(f"**Notes:** {row['notes']}")
-            with col_i:
-                if row['image_path'] and os.path.exists(row['image_path']):
-                    st.image(row['image_path'], use_container_width=True)
+    for r in get_all_entries():
+        with st.expander(f"📌 {r['timestamp']} | Petra: {r['petra_code']}"):
+            ci, ct = st.columns([1, 2])
+            with ci:
+                if r['image_path'] and os.path.exists(r['image_path']):
+                    st.image(r['image_path'], use_container_width=True)
+            with ct:
+                st.write(f"**Project:** {r['project_number'] or 'N/A'}")
+                st.write(f"**Part #:** {r['part_number'] or 'N/A'}")
+                st.info(f"**Notes:** {r['notes'] or 'No notes'}")
 
+# --- TAB 2: DASHBOARD ---
 with tab_dashboard:
-    st.header("Reports")
-    # هنا يمكن إضافة كود الإكسل لاحقاً إذا احتجت
+    st.header("Reports & Analytics")
+    data = get_all_entries()
+    if data:
+        df = pd.DataFrame([dict(r) for r in data])
+        # زر الإكسل اللي كان في الصورة
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='All_Entries')
+        
+        st.download_button(
+            label="📥 Export All Entries to Excel",
+            data=output.getvalue(),
+            file_name=f"Fault_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.ms-excel",
+            type="primary"
+        )
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No data to show yet.")
 
+# --- TAB 3: ADMIN ---
 with tab_admin:
-    st.header("Admin Management")
-    entries = get_all_entries()
-    if entries:
-        # عرض تفاصيل كاملة في قائمة الحذف
-        options = {f"ID: {r['id']} | {r['timestamp']} | Petra: {r['petra_code']}": r['id'] for r in entries}
-        to_del = st.multiselect("Select entries to delete", list(options.keys()))
-        if st.button("Delete Selected", type="primary"):
-            delete_entries([options[x] for x in to_del])
-            st.success("Deleted successfully!")
+    st.header("Delete Records")
+    all_r = get_all_entries()
+    if all_r:
+        choices = {f"[{r['id']}] {r['timestamp']} - {r['petra_code']}": r['id'] for r in all_r}
+        selected = st.multiselect("Select entries to remove", list(choices.keys()))
+        if st.button("Confirm Delete", type="primary"):
+            conn = get_connection()
+            for s in selected:
+                conn.execute("DELETE FROM entries WHERE id = ?", (choices[s],))
+            conn.commit()
+            conn.close()
+            st.success("Deleted!")
             st.rerun()
