@@ -345,9 +345,7 @@ with tab_submit:
             placeholder="Describe the fault, observations, or any additional details...",
             height=120
         )
- 
-        st.subheader("Capture Image (optional)")
-        capture_method = st.radio(
+capture_method = st.radio(
             "Choose capture method",
             options=[
                 "Use device camera / gallery (recommended for mobile - allows front/back camera switching)",
@@ -356,7 +354,7 @@ with tab_submit:
             index=0,
             help="On mobile, the device camera option lets you choose front camera, back camera, or pick from your gallery."
         )
- 
+
         camera_image = None
         if capture_method.startswith("Use device"):
             camera_image = st.file_uploader(
@@ -367,11 +365,11 @@ with tab_submit:
             )
         else:
             camera_image = st.camera_input("Take a photo of the faulty part")
- 
+
         submitted = st.form_submit_button(
             "Submit Report", use_container_width=True, type="primary"
         )
- 
+
         if submitted:
             if not petra_code.strip():
                 st.error("Petra Code is required. Please enter a Petra Code before submitting.")
@@ -385,7 +383,7 @@ with tab_submit:
                     image_path = None
                     if camera_image:
                         image_path = save_image(camera_image)
- 
+
                     save_entry(
                         petra_code.strip(),
                         part_number.strip(),
@@ -393,44 +391,44 @@ with tab_submit:
                         notes.strip(),
                         image_path,
                     )
- 
+
                     petra_count, part_count = count_after_save(
                         petra_code.strip(), part_number.strip()
                     )
- 
+
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.success("Entry submitted successfully! Recorded at: " + now_str)
- 
+
                     alarm_petra = petra_count >= ALARM_THRESHOLD
                     alarm_part = part_number.strip() and part_count >= ALARM_THRESHOLD
- 
+
                     if alarm_petra or alarm_part:
                         st.error("HIGH PRIORITY - This part has repeated issues. Please check EPLAN routing/definition.")
                         if alarm_petra:
                             st.warning("Petra Code '" + petra_code + "' has now been reported " + str(petra_count) + " time(s).")
                         if alarm_part:
                             st.warning("Part Number '" + part_number + "' has now been reported " + str(part_count) + " time(s).")
- 
- 
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 - DASHBOARD
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_dashboard:
- 
+
     critical_petra = get_critical_petra_codes()
     critical_parts = get_critical_part_numbers()
     has_critical = len(critical_petra) > 0 or len(critical_parts) > 0
- 
+
     st.header("Critical Recurring Issues")
     st.caption("Items reported " + str(ALARM_THRESHOLD) + " or more times.")
- 
+
     if not has_critical:
         st.success("No recurring issues detected. All parts are within acceptable submission limits.")
     else:
         st.error("The following codes have been reported " + str(ALARM_THRESHOLD) + "+ times and require immediate EPLAN review.")
- 
+
         col_petra, col_parts = st.columns(2)
- 
+
         with col_petra:
             st.subheader("Recurring Petra Codes")
             if critical_petra:
@@ -444,7 +442,7 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
- 
+
         with col_parts:
             st.subheader("Recurring Part Numbers")
             if critical_parts:
@@ -458,11 +456,11 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
- 
+
     st.markdown("---")
     st.header("Export Critical Issues")
     st.info("Generates an Excel file with 3 sheets: full detail rows for all recurring entries (Project Number, Petra Code, Part Number, Notes, Submission Date), plus summary sheets for critical codes and part numbers.")
- 
+
     if has_critical:
         excel_data = build_excel_report()
         st.download_button(
@@ -480,12 +478,12 @@ with tab_dashboard:
         )
     else:
         st.info("No critical issues to export yet.")
- 
+
     st.markdown("---")
     st.header("All Submitted Entries")
- 
+
     entries = get_all_entries()
- 
+
     if not entries:
         st.info("No entries yet. Submit your first fault report using the 'Submit Entry' tab.")
     else:
@@ -493,7 +491,7 @@ with tab_dashboard:
         search_term = st.text_input(
             "Search by Petra Code, Part Number, or Project Number", ""
         )
- 
+
         filtered = entries
         if search_term:
             s = search_term.lower()
@@ -503,26 +501,26 @@ with tab_dashboard:
                 or s in (e["part_number"] or "").lower()
                 or s in (e["project_number"] or "").lower()
             ]
- 
+
         st.write("Showing " + str(len(filtered)) + " record(s)")
- 
+
         for entry in filtered:
             label = str(entry["timestamp"]) + " | Petra: " + str(entry["petra_code"])
             if entry["part_number"]:
                 label += " | Part: " + str(entry["part_number"])
             if entry["project_number"]:
                 label += " | Project: " + str(entry["project_number"])
- 
+
             with st.expander(label, expanded=False):
                 col_info, col_img = st.columns([2, 1])
- 
+
                 with col_info:
                     st.write("Submission Date: " + str(entry["timestamp"]))
                     st.write("Petra Code: " + str(entry["petra_code"]))
                     st.write("Part Number: " + (str(entry["part_number"]) if entry["part_number"] else "-"))
                     st.write("Project Number: " + (str(entry["project_number"]) if entry["project_number"] else "-"))
                     st.write("Notes: " + (str(entry["notes"]) if entry["notes"] else "No notes provided"))
- 
+
                 with col_img:
                     if entry["image_path"] and os.path.exists(entry["image_path"]):
                         st.image(
@@ -531,17 +529,17 @@ with tab_dashboard:
                         )
                     else:
                         st.write("No image captured")
- 
- 
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 - ADMIN / DELETE
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_admin:
     st.header("Admin - Delete Entries")
     st.warning("Deleted entries cannot be recovered. Use this section only to remove accidental or test submissions.")
- 
+
     all_entries = get_all_entries()
- 
+
     if not all_entries:
         st.info("No entries in the database.")
     else:
@@ -553,16 +551,16 @@ with tab_admin:
             if e["project_number"]:
                 label += " | Project: " + str(e["project_number"])
             entry_options[label] = e["id"]
- 
+
         selected_labels = st.multiselect(
             "Select entries to delete",
             options=list(entry_options.keys()),
             help="You can select multiple entries at once."
         )
- 
+
         if selected_labels:
             st.write(str(len(selected_labels)) + " entry(ies) selected for deletion.")
- 
+
             for label in selected_labels:
                 eid = entry_options[label]
                 entry = next((e for e in all_entries if e["id"] == eid), None)
@@ -573,11 +571,11 @@ with tab_admin:
                         st.write("Part Number: " + (str(entry["part_number"]) if entry["part_number"] else "-"))
                         st.write("Project Number: " + (str(entry["project_number"]) if entry["project_number"] else "-"))
                         st.write("Notes: " + (str(entry["notes"]) if entry["notes"] else "None"))
- 
+
             confirm = st.checkbox(
                 "I confirm I want to permanently delete " + str(len(selected_labels)) + " entry(ies)."
             )
- 
+
             if st.button(
                 "Delete " + str(len(selected_labels)) + " Selected Entry(ies)",
                 type="primary",
@@ -589,3 +587,6 @@ with tab_admin:
                 st.rerun()
         else:
             st.info("Select one or more entries above to delete them.")
+
+        st.subheader("Capture Image (optional)")
+        
