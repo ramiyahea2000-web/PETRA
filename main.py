@@ -12,20 +12,14 @@ DB_PATH = os.path.join(APP_DIR, "workshop.db")
 UPLOAD_DIR = os.path.join(APP_DIR, "uploads")
 LOGO_PATH = os.path.join(APP_DIR, "petra_logo.png")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
- 
 ALARM_THRESHOLD = 3
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATABASE
 # ─────────────────────────────────────────────────────────────────────────────
- 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
- 
- 
 def init_db():
     conn = get_connection()
     conn.execute("""
