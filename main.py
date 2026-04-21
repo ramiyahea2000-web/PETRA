@@ -536,12 +536,14 @@ with tab_dashboard:
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_admin:
     st.header("🗑️ Admin — Delete Entries")
-    st.markdown(
-        "<div style='background-color:#fff3cd;color:#856404;padding:12px 16px;"
-        "border-radius:8px;border-left:5px solid #ffc107;margin-bottom:16px;font-size:14px;'>"
-        "⚠️ <strong>Warning:</strong> Deleted entries cannot be recovered. "
-        "Use this section only to remove accidental or test submissions."
-        "</div>",
+   st.markdown(
+        """
+        <div style='background-color:#fff3cd;color:#856404;padding:12px 16px;
+        border-radius:8px;border-left:5px solid #ffc107;margin-bottom:16px;font-size:14px;'>
+        ⚠️ <strong>Warning:</strong> Deleted entries cannot be recovered.
+        Use this section only to remove accidental or test submissions.
+        </div>
+        """,
         unsafe_allow_html=True,
     )
     all_entries = get_all_entries()
