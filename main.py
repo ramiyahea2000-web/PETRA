@@ -7,7 +7,6 @@ from PIL import Image
 import io
 import base64
 import pandas as pd
- 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "workshop.db")
 UPLOAD_DIR = os.path.join(APP_DIR, "uploads")
