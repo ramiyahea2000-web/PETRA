@@ -8,6 +8,7 @@ import io
 import base64
 import pandas as pd
 
+# 1. إعدادات المسارات
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "workshop.db")
 UPLOAD_DIR = os.path.join(APP_DIR, "uploads")
@@ -16,10 +17,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALARM_THRESHOLD = 3
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DATABASE
-# ─────────────────────────────────────────────────────────────────────────────
-
+# 2. وظائف قاعدة البيانات
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -91,15 +89,6 @@ def delete_entries(ids):
     conn.commit()
     conn.close()
 
-def count_after_save(petra_code, part_number):
-    conn = get_connection()
-    petra_count = conn.execute("SELECT COUNT(*) FROM entries WHERE petra_code = ?", (petra_code,)).fetchone()[0]
-    part_count = 0
-    if part_number:
-        part_count = conn.execute("SELECT COUNT(*) FROM entries WHERE part_number = ?", (part_number,)).fetchone()[0]
-    conn.close()
-    return petra_count, part_count
-
 def get_all_entries():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM entries ORDER BY timestamp DESC").fetchall()
@@ -116,44 +105,12 @@ def get_critical_petra_codes():
     conn.close()
     return rows
 
-def get_critical_part_numbers():
-    conn = get_connection()
-    rows = conn.execute(
-        f"SELECT part_number, COUNT(*) AS total_count, MAX(timestamp) AS last_seen "
-        f"FROM entries WHERE part_number IS NOT NULL AND part_number != '' "
-        f"GROUP BY part_number HAVING COUNT(*) >= {ALARM_THRESHOLD} "
-        "ORDER BY total_count DESC"
-    ).fetchall()
-    conn.close()
-    return rows
-
-def get_recurring_entries_full():
-    conn = get_connection()
-    t = str(ALARM_THRESHOLD)
-    rows = conn.execute(
-        f"SELECT id, project_number, petra_code, part_number, notes, timestamp FROM entries "
-        f"WHERE petra_code IN (SELECT petra_code FROM entries GROUP BY petra_code HAVING COUNT(*) >= {t}) "
-        f"OR (part_number IS NOT NULL AND part_number != '' AND part_number IN "
-        f"(SELECT part_number FROM entries WHERE part_number IS NOT NULL AND part_number != '' "
-        f"GROUP BY part_number HAVING COUNT(*) >= {t})) "
-        "ORDER BY petra_code, part_number, timestamp"
-    ).fetchall()
-    conn.close()
-    return rows
-
 def build_excel_report():
-    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-    critical_petra = get_critical_petra_codes()
-    critical_parts = get_critical_part_numbers()
-    full_rows = get_recurring_entries_full()
-    red_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
-    white_bold = Font(color="FFFFFF", bold=True)
+    data = get_all_entries()
+    df = pd.DataFrame([dict(r) for r in data])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        detail_df = pd.DataFrame([dict(r) for r in full_rows])
-        detail_df.to_excel(writer, index=False, sheet_name="Details")
-        petra_df = pd.DataFrame([dict(r) for r in critical_petra])
-        petra_df.to_excel(writer, index=False, sheet_name="Critical Petra")
+        df.to_excel(writer, index=False, sheet_name="All Entries")
     output.seek(0)
     return output
 
@@ -164,12 +121,9 @@ def save_image(image_file):
     img.save(filepath)
     return filepath
 
-# ─────────────────────────────────────────────────────────────────────────────
-# APP INTERFACE
-# ─────────────────────────────────────────────────────────────────────────────
-
+# 3. واجهة التطبيق
 init_db()
-st.set_page_config(page_title="Panel Workshop - Fault Reporter", page_icon="🏭", layout="wide")
+st.set_page_config(page_title="Petra Panel Workshop", page_icon="🏭", layout="wide")
 
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
@@ -179,7 +133,6 @@ st.title("Panel Workshop - Fault Reporter")
 tab_submit, tab_dashboard, tab_admin = st.tabs(["Submit Entry", "Dashboard", "Admin / Delete"])
 
 with tab_submit:
-    st.header("Report a Faulty Part")
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -207,8 +160,8 @@ with tab_submit:
 
     st.markdown("---")
     st.header("All Submitted Entries")
-    entries = get_all_entries()
-    for e in entries:
+    all_entries = get_all_entries()
+    for e in all_entries:
         with st.expander(f"{e['timestamp']} | Petra: {e['petra_code']}"):
             c1, c2 = st.columns([2, 1])
             with c1:
@@ -221,8 +174,21 @@ with tab_submit:
 
 with tab_dashboard:
     st.header("Dashboard")
-    critical_petra = get_critical_petra_codes()
-    if critical_petra:
-        st.error("Critical Issues Detected!")
-        st.dataframe(pd.DataFrame([dict(r) for r in critical_petra]), use_container_width=True)
-        if st.button("Download Excel Report
+    critical = get_critical_petra_codes()
+    if critical:
+        st.error("Critical Issues Found!")
+        st.dataframe(pd.DataFrame([dict(r) for r in critical]))
+        st.download_button("Download Excel Report", build_excel_report(), "report.xlsx")
+    else:
+        st.success("No critical issues.")
+
+with tab_admin:
+    st.header("Admin - Delete")
+    entries_to_del = get_all_entries()
+    if entries_to_del:
+        options = {f"ID: {e['id']} | {e['timestamp']} | Petra: {e['petra_code']}": e['id'] for e in entries_to_del}
+        selected = st.multiselect("Select to delete", list(options.keys()))
+        if st.button("Delete Selected", type="primary"):
+            delete_entries([options[s] for s in selected])
+            st.success("Deleted!")
+            st.rerun()
