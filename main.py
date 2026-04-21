@@ -7,26 +7,19 @@ from PIL import Image
 import io
 import base64
 import pandas as pd
- 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "workshop.db")
 UPLOAD_DIR = os.path.join(APP_DIR, "uploads")
 LOGO_PATH = os.path.join(APP_DIR, "petra_logo.png")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
- 
 ALARM_THRESHOLD = 3
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATABASE
 # ─────────────────────────────────────────────────────────────────────────────
- 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
- 
- 
 def init_db():
     conn = get_connection()
     conn.execute("""
@@ -60,13 +53,10 @@ def init_db():
         conn.execute("ALTER TABLE entries_new RENAME TO entries")
     conn.commit()
     conn.close()
- 
- 
 def is_duplicate(petra_code, part_number, project_number):
     """Return (is_dup, reason) — checks petra_code+project and part_number+project combos."""
     conn = get_connection()
     pn = project_number.strip() if project_number and project_number.strip() else None
- 
     if pn:
         petra_dup = conn.execute(
             "SELECT COUNT(*) FROM entries WHERE petra_code = ? AND project_number = ?",
@@ -75,7 +65,6 @@ def is_duplicate(petra_code, part_number, project_number):
         if petra_dup > 0:
             conn.close()
             return True, f"Petra Code '{petra_code}' already exists for Project '{pn}'."
- 
         if part_number and part_number.strip():
             part_dup = conn.execute(
                 "SELECT COUNT(*) FROM entries WHERE part_number = ? AND project_number = ?",
@@ -92,7 +81,6 @@ def is_duplicate(petra_code, part_number, project_number):
         if petra_dup > 0:
             conn.close()
             return True, f"Petra Code '{petra_code}' already exists with no project number."
- 
         if part_number and part_number.strip():
             part_dup = conn.execute(
                 "SELECT COUNT(*) FROM entries WHERE part_number = ? AND (project_number IS NULL OR project_number = '')",
@@ -101,11 +89,8 @@ def is_duplicate(petra_code, part_number, project_number):
             if part_dup > 0:
                 conn.close()
                 return True, f"Part Number '{part_number.strip()}' already exists with no project number."
- 
     conn.close()
     return False, ""
- 
- 
 def save_entry(petra_code, part_number, project_number, notes, image_path):
     conn = get_connection()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -124,8 +109,6 @@ def save_entry(petra_code, part_number, project_number, notes, image_path):
     )
     conn.commit()
     conn.close()
- 
- 
 def delete_entries(ids):
     if not ids:
         return
@@ -134,8 +117,6 @@ def delete_entries(ids):
     conn.execute(f"DELETE FROM entries WHERE id IN ({placeholders})", ids)
     conn.commit()
     conn.close()
- 
- 
 def count_after_save(petra_code, part_number):
     conn = get_connection()
     petra_count = conn.execute(
@@ -148,15 +129,11 @@ def count_after_save(petra_code, part_number):
         ).fetchone()[0]
     conn.close()
     return petra_count, part_count
- 
- 
 def get_all_entries():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM entries ORDER BY timestamp DESC").fetchall()
     conn.close()
     return rows
- 
- 
 def get_critical_petra_codes():
     conn = get_connection()
     rows = conn.execute(f"""
@@ -170,8 +147,6 @@ def get_critical_petra_codes():
     """).fetchall()
     conn.close()
     return rows
- 
- 
 def get_critical_part_numbers():
     conn = get_connection()
     rows = conn.execute(f"""
@@ -186,8 +161,6 @@ def get_critical_part_numbers():
     """).fetchall()
     conn.close()
     return rows
- 
- 
 def get_recurring_entries_full():
     """Return all individual entries belonging to any critical petra_code or part_number."""
     conn = get_connection()
@@ -210,15 +183,11 @@ def get_recurring_entries_full():
     """).fetchall()
     conn.close()
     return rows
- 
- 
 def build_excel_report():
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
- 
     critical_petra = get_critical_petra_codes()
     critical_parts = get_critical_part_numbers()
     full_rows = get_recurring_entries_full()
- 
     red_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
     white_bold = Font(color="FFFFFF", bold=True, size=12)
     center = Alignment(horizontal="center", vertical="center")
@@ -226,7 +195,6 @@ def build_excel_report():
         left=Side(style="thin"), right=Side(style="thin"),
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
- 
     def style_sheet(ws):
         for cell in ws[1]:
             cell.fill = red_fill
@@ -236,10 +204,8 @@ def build_excel_report():
         for col in ws.columns:
             max_len = max((len(str(c.value)) if c.value else 0) for c in col)
             ws.column_dimensions[col[0].column_letter].width = max_len + 6
- 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
- 
         # Sheet 1 — Full detail rows for recurring entries
         detail_data = [
             {
@@ -256,7 +222,6 @@ def build_excel_report():
         )
         detail_df.to_excel(writer, index=False, sheet_name="Recurring Entries (Detail)")
         style_sheet(writer.sheets["Recurring Entries (Detail)"])
- 
         # Sheet 2 — Summary: critical petra codes
         petra_rows = [
             {
@@ -271,7 +236,6 @@ def build_excel_report():
         )
         petra_df.to_excel(writer, index=False, sheet_name="Critical Petra Codes")
         style_sheet(writer.sheets["Critical Petra Codes"])
- 
         # Sheet 3 — Summary: critical part numbers
         part_rows = [
             {
@@ -286,43 +250,31 @@ def build_excel_report():
         )
         parts_df.to_excel(writer, index=False, sheet_name="Critical Part Numbers")
         style_sheet(writer.sheets["Critical Part Numbers"])
- 
     output.seek(0)
     return output
- 
- 
 def save_image(image_file):
     filename = f"{uuid.uuid4().hex}.png"
     filepath = os.path.join(UPLOAD_DIR, filename)
     img = Image.open(image_file)
     img.save(filepath)
     return filepath
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # APP
 # ─────────────────────────────────────────────────────────────────────────────
- 
 init_db()
- 
 st.set_page_config(
     page_title="Panel Workshop - Fault Reporter",
     page_icon="🏭",
     layout="wide"
 )
- 
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, width=250)
- 
 st.title("🏭 Panel Workshop — Fault Reporter")
- 
 tab_submit, tab_dashboard, tab_admin = st.tabs(
     ["📋 Submit Entry", "📊 Dashboard", "🗑️ Admin / Delete"]
 )
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 — SUBMIT ENTRY
 # ─────────────────────────────────────────────────────────────────────────────
@@ -336,10 +288,8 @@ with tab_submit:
         "</div>",
         unsafe_allow_html=True,
     )
- 
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
- 
         with col1:
             petra_code = st.text_input(
                 "Petra Code *",
@@ -350,19 +300,16 @@ with tab_submit:
                 "Part Number",
                 placeholder="Enter Part Number (optional)",
             )
- 
         with col2:
             project_number = st.text_input(
                 "Project Number",
                 placeholder="Enter Project Number (optional)",
             )
- 
         notes = st.text_area(
             "Notes (optional)",
             placeholder="Describe the fault, observations, or any additional details...",
             height=120
         )
- 
         st.subheader("Capture Image (optional)")
         capture_method = st.radio(
             "Choose capture method",
@@ -373,7 +320,6 @@ with tab_submit:
             index=0,
             help="On mobile, the device camera option lets you choose front camera, back camera, or pick from your gallery."
         )
- 
         camera_image = None
         if capture_method.startswith("📱"):
             camera_image = st.file_uploader(
@@ -384,11 +330,9 @@ with tab_submit:
             )
         else:
             camera_image = st.camera_input("Take a photo of the faulty part")
- 
         submitted = st.form_submit_button(
             "Submit Report", use_container_width=True, type="primary"
         )
- 
         if submitted:
             if not petra_code.strip():
                 st.error("Petra Code is required. Please enter a Petra Code before submitting.")
@@ -406,7 +350,6 @@ with tab_submit:
                     image_path = None
                     if camera_image:
                         image_path = save_image(camera_image)
- 
                     save_entry(
                         petra_code.strip(),
                         part_number.strip(),
@@ -414,17 +357,13 @@ with tab_submit:
                         notes.strip(),
                         image_path,
                     )
- 
                     petra_count, part_count = count_after_save(
                         petra_code.strip(), part_number.strip()
                     )
- 
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.success(f"✅ Entry submitted successfully! Recorded at: **{now_str}**")
- 
                     alarm_petra = petra_count >= ALARM_THRESHOLD
                     alarm_part = part_number.strip() and part_count >= ALARM_THRESHOLD
- 
                     if alarm_petra or alarm_part:
                         st.markdown(
                             "<div style='background-color:#FF0000;color:white;padding:30px;"
@@ -455,20 +394,15 @@ with tab_submit:
                             + "<br>".join(details) + "</div>",
                             unsafe_allow_html=True,
                         )
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 — DASHBOARD
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_dashboard:
- 
     critical_petra = get_critical_petra_codes()
     critical_parts = get_critical_part_numbers()
     has_critical = len(critical_petra) > 0 or len(critical_parts) > 0
- 
     st.markdown("## ⚠️ Critical Recurring Issues")
     st.caption(f"Items reported {ALARM_THRESHOLD} or more times.")
- 
     if not has_critical:
         st.markdown(
             "<div style='background-color:#e8f5e9;color:#2e7d32;padding:16px;"
@@ -486,9 +420,7 @@ with tab_dashboard:
             "</div>",
             unsafe_allow_html=True,
         )
- 
         col_petra, col_parts = st.columns(2)
- 
         with col_petra:
             st.markdown(
                 "<div style='background-color:#fff3f3;border:2px solid #e53935;"
@@ -508,7 +440,6 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
- 
         with col_parts:
             st.markdown(
                 "<div style='background-color:#fff3f3;border:2px solid #e53935;"
@@ -528,7 +459,6 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
- 
     st.markdown("---")
     st.markdown("## 📤 Export Critical Issues")
     st.markdown(
@@ -540,7 +470,6 @@ with tab_dashboard:
         "</div>",
         unsafe_allow_html=True,
     )
- 
     if has_critical:
         excel_data = build_excel_report()
         st.download_button(
@@ -558,12 +487,9 @@ with tab_dashboard:
         )
     else:
         st.info("No critical issues to export yet.")
- 
     st.markdown("---")
     st.header("📋 All Submitted Entries")
- 
     entries = get_all_entries()
- 
     if not entries:
         st.info("No entries yet. Submit your first fault report using the 'Submit Entry' tab.")
     else:
@@ -571,7 +497,6 @@ with tab_dashboard:
         search_term = st.text_input(
             "🔍 Search by Petra Code, Part Number, or Project Number", ""
         )
- 
         filtered = entries
         if search_term:
             s = search_term.lower()
@@ -581,19 +506,15 @@ with tab_dashboard:
                 or s in (e["part_number"] or "").lower()
                 or s in (e["project_number"] or "").lower()
             ]
- 
         st.write(f"Showing **{len(filtered)}** record(s)")
- 
         for entry in filtered:
             label = f"📄 {entry['timestamp']} | Petra: {entry['petra_code']}"
             if entry["part_number"]:
                 label += f" | Part: {entry['part_number']}"
             if entry["project_number"]:
                 label += f" | Project: {entry['project_number']}"
- 
             with st.expander(label, expanded=False):
                 col_info, col_img = st.columns([2, 1])
- 
                 with col_info:
                     st.markdown(f"**🕐 Submission Date:** {entry['timestamp']}")
                     st.markdown(f"**🔑 Petra Code:** `{entry['petra_code']}`")
@@ -602,7 +523,6 @@ with tab_dashboard:
                     st.markdown(
                         f"**📝 Notes:** {entry['notes'] if entry['notes'] else '_No notes provided_'}"
                     )
- 
                 with col_img:
                     if entry["image_path"] and os.path.exists(entry["image_path"]):
                         st.image(
@@ -611,8 +531,6 @@ with tab_dashboard:
                         )
                     else:
                         st.markdown("_No image captured_")
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — ADMIN / DELETE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -626,9 +544,7 @@ with tab_admin:
         "</div>",
         unsafe_allow_html=True,
     )
- 
     all_entries = get_all_entries()
- 
     if not all_entries:
         st.info("No entries in the database.")
     else:
@@ -639,16 +555,13 @@ with tab_admin:
             e["id"]
             for e in all_entries
         }
- 
         selected_labels = st.multiselect(
             "Select entries to delete",
             options=list(entry_options.keys()),
             help="You can select multiple entries at once."
         )
- 
         if selected_labels:
             st.markdown(f"**{len(selected_labels)} entry(ies) selected for deletion.**")
- 
             for label in selected_labels:
                 eid = entry_options[label]
                 entry = next((e for e in all_entries if e["id"] == eid), None)
@@ -661,11 +574,9 @@ with tab_admin:
                         st.markdown(
                             f"**Notes:** {entry['notes'] if entry['notes'] else '_None_'}"
                         )
- 
             confirm = st.checkbox(
                 f"I confirm I want to permanently delete {len(selected_labels)} entry(ies)."
             )
- 
             if st.button(
                 f"🗑️ Delete {len(selected_labels)} Selected Entry(ies)",
                 type="primary",
