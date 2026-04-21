@@ -53,12 +53,9 @@ def init_db():
         conn.execute("ALTER TABLE entries_new RENAME TO entries")
     conn.commit()
     conn.close()
- 
- 
 def is_duplicate(petra_code, part_number, project_number):
     conn = get_connection()
     pn = project_number.strip() if project_number and project_number.strip() else None
- 
     if pn:
         petra_dup = conn.execute(
             "SELECT COUNT(*) FROM entries WHERE petra_code = ? AND project_number = ?",
@@ -67,7 +64,6 @@ def is_duplicate(petra_code, part_number, project_number):
         if petra_dup > 0:
             conn.close()
             return True, "Petra Code '" + petra_code + "' already exists for Project '" + pn + "'."
- 
         if part_number and part_number.strip():
             part_dup = conn.execute(
                 "SELECT COUNT(*) FROM entries WHERE part_number = ? AND project_number = ?",
@@ -84,7 +80,6 @@ def is_duplicate(petra_code, part_number, project_number):
         if petra_dup > 0:
             conn.close()
             return True, "Petra Code '" + petra_code + "' already exists with no project number."
- 
         if part_number and part_number.strip():
             part_dup = conn.execute(
                 "SELECT COUNT(*) FROM entries WHERE part_number = ? AND (project_number IS NULL OR project_number = '')",
@@ -93,11 +88,8 @@ def is_duplicate(petra_code, part_number, project_number):
             if part_dup > 0:
                 conn.close()
                 return True, "Part Number '" + part_number.strip() + "' already exists with no project number."
- 
     conn.close()
     return False, ""
- 
- 
 def save_entry(petra_code, part_number, project_number, notes, image_path):
     conn = get_connection()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -116,8 +108,6 @@ def save_entry(petra_code, part_number, project_number, notes, image_path):
     )
     conn.commit()
     conn.close()
- 
- 
 def delete_entries(ids):
     if not ids:
         return
@@ -126,9 +116,7 @@ def delete_entries(ids):
     conn.execute("DELETE FROM entries WHERE id IN (" + placeholders + ")", ids)
     conn.commit()
     conn.close()
- 
- 
-def count_after_save(petra_code, part_number):
+ def count_after_save(petra_code, part_number):
     conn = get_connection()
     petra_count = conn.execute(
         "SELECT COUNT(*) FROM entries WHERE petra_code = ?", (petra_code,)
@@ -140,15 +128,11 @@ def count_after_save(petra_code, part_number):
         ).fetchone()[0]
     conn.close()
     return petra_count, part_count
- 
- 
 def get_all_entries():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM entries ORDER BY timestamp DESC").fetchall()
     conn.close()
     return rows
- 
- 
 def get_critical_petra_codes():
     conn = get_connection()
     rows = conn.execute(
@@ -159,8 +143,6 @@ def get_critical_petra_codes():
     ).fetchall()
     conn.close()
     return rows
- 
- 
 def get_critical_part_numbers():
     conn = get_connection()
     rows = conn.execute(
@@ -172,8 +154,6 @@ def get_critical_part_numbers():
     ).fetchall()
     conn.close()
     return rows
- 
- 
 def get_recurring_entries_full():
     conn = get_connection()
     threshold = str(ALARM_THRESHOLD)
@@ -196,15 +176,11 @@ def get_recurring_entries_full():
     ).fetchall()
     conn.close()
     return rows
- 
- 
 def build_excel_report():
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
- 
     critical_petra = get_critical_petra_codes()
     critical_parts = get_critical_part_numbers()
     full_rows = get_recurring_entries_full()
- 
     red_fill = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
     white_bold = Font(color="FFFFFF", bold=True, size=12)
     center = Alignment(horizontal="center", vertical="center")
@@ -212,7 +188,6 @@ def build_excel_report():
         left=Side(style="thin"), right=Side(style="thin"),
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
- 
     def style_sheet(ws):
         for cell in ws[1]:
             cell.fill = red_fill
@@ -222,10 +197,8 @@ def build_excel_report():
         for col in ws.columns:
             max_len = max((len(str(c.value)) if c.value else 0) for c in col)
             ws.column_dimensions[col[0].column_letter].width = max_len + 6
- 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
- 
         detail_data = [
             {
                 "Project Number": r["project_number"] or "-",
@@ -241,7 +214,6 @@ def build_excel_report():
         )
         detail_df.to_excel(writer, index=False, sheet_name="Recurring Entries (Detail)")
         style_sheet(writer.sheets["Recurring Entries (Detail)"])
- 
         petra_rows = [
             {
                 "Petra Code": r["petra_code"],
@@ -255,7 +227,6 @@ def build_excel_report():
         )
         petra_df.to_excel(writer, index=False, sheet_name="Critical Petra Codes")
         style_sheet(writer.sheets["Critical Petra Codes"])
- 
         part_rows = [
             {
                 "Part Number": r["part_number"],
@@ -269,53 +240,39 @@ def build_excel_report():
         )
         parts_df.to_excel(writer, index=False, sheet_name="Critical Part Numbers")
         style_sheet(writer.sheets["Critical Part Numbers"])
- 
     output.seek(0)
     return output
- 
- 
 def save_image(image_file):
     filename = uuid.uuid4().hex + ".png"
     filepath = os.path.join(UPLOAD_DIR, filename)
     img = Image.open(image_file)
     img.save(filepath)
     return filepath
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # APP
 # ─────────────────────────────────────────────────────────────────────────────
- 
 init_db()
- 
 st.set_page_config(
     page_title="Panel Workshop - Fault Reporter",
     page_icon="🏭",
     layout="wide"
 )
- 
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
     if os.path.exists(LOGO_PATH):
         st.image(LOGO_PATH, width=250)
- 
 st.title("Panel Workshop - Fault Reporter")
- 
 tab_submit, tab_dashboard, tab_admin = st.tabs(
     ["Submit Entry", "Dashboard", "Admin / Delete"]
 )
- 
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 - SUBMIT ENTRY
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_submit:
     st.header("Report a Faulty Part")
     st.info("Fields marked with * are required. All other fields are optional. The submission date and time are recorded automatically.")
- 
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
- 
         with col1:
             petra_code = st.text_input(
                 "Petra Code *",
@@ -326,13 +283,11 @@ with tab_submit:
                 "Part Number",
                 placeholder="Enter Part Number (optional)",
             )
- 
         with col2:
             project_number = st.text_input(
                 "Project Number",
                 placeholder="Enter Project Number (optional)",
             )
- 
         notes = st.text_area(
             "Notes (optional)",
             placeholder="Describe the fault, observations, or any additional details...",
@@ -347,7 +302,6 @@ capture_method = st.radio(
             index=0,
             help="On mobile, the device camera option lets you choose front camera, back camera, or pick from your gallery."
         )
-
         camera_image = None
         if capture_method.startswith("Use device"):
             camera_image = st.file_uploader(
@@ -358,11 +312,9 @@ capture_method = st.radio(
             )
         else:
             camera_image = st.camera_input("Take a photo of the faulty part")
-
         submitted = st.form_submit_button(
             "Submit Report", use_container_width=True, type="primary"
         )
-
         if submitted:
             if not petra_code.strip():
                 st.error("Petra Code is required. Please enter a Petra Code before submitting.")
@@ -376,7 +328,6 @@ capture_method = st.radio(
                     image_path = None
                     if camera_image:
                         image_path = save_image(camera_image)
-
                     save_entry(
                         petra_code.strip(),
                         part_number.strip(),
@@ -384,44 +335,33 @@ capture_method = st.radio(
                         notes.strip(),
                         image_path,
                     )
-
                     petra_count, part_count = count_after_save(
                         petra_code.strip(), part_number.strip()
                     )
-
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     st.success("Entry submitted successfully! Recorded at: " + now_str)
-
                     alarm_petra = petra_count >= ALARM_THRESHOLD
                     alarm_part = part_number.strip() and part_count >= ALARM_THRESHOLD
-
                     if alarm_petra or alarm_part:
                         st.error("HIGH PRIORITY - This part has repeated issues. Please check EPLAN routing/definition.")
                         if alarm_petra:
                             st.warning("Petra Code '" + petra_code + "' has now been reported " + str(petra_count) + " time(s).")
                         if alarm_part:
                             st.warning("Part Number '" + part_number + "' has now been reported " + str(part_count) + " time(s).")
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 - DASHBOARD
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_dashboard:
-
     critical_petra = get_critical_petra_codes()
     critical_parts = get_critical_part_numbers()
     has_critical = len(critical_petra) > 0 or len(critical_parts) > 0
-
     st.header("Critical Recurring Issues")
     st.caption("Items reported " + str(ALARM_THRESHOLD) + " or more times.")
-
     if not has_critical:
         st.success("No recurring issues detected. All parts are within acceptable submission limits.")
     else:
         st.error("The following codes have been reported " + str(ALARM_THRESHOLD) + "+ times and require immediate EPLAN review.")
-
         col_petra, col_parts = st.columns(2)
-
         with col_petra:
             st.subheader("Recurring Petra Codes")
             if critical_petra:
@@ -435,7 +375,6 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
-
         with col_parts:
             st.subheader("Recurring Part Numbers")
             if critical_parts:
@@ -449,7 +388,6 @@ with tab_dashboard:
                 )
             else:
                 st.info("None found.")
-
     st.markdown("---")
     st.header("Export Critical Issues")
     st.info("Generates an Excel file with 3 sheets: full detail rows for all recurring entries (Project Number, Petra Code, Part Number, Notes, Submission Date), plus summary sheets for critical codes and part numbers.")
